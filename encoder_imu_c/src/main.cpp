@@ -46,6 +46,10 @@ static volatile uint64_t pps_counter     = 0;
 static volatile uint64_t time_offset_us  = 0;
 static volatile bool     logging_enabled = false;
 
+// Reject implausibly-fast PPS edges (e.g., ringing/noise).
+static volatile uint64_t last_pps_edge_us = 0;
+static constexpr uint64_t PPS_MIN_INTERVAL_US = 200000; // 200 ms
+
 // Sync request from core 0, executed by core 1 so encoder/PPS/ring reset is atomic
 // relative to motion sampling.
 static volatile bool     sync_request    = false;
@@ -172,7 +176,12 @@ static bool readBNO085_RVC(BNO085RvcData &out) {
 static void service_pps_fifo() {
     while (!pio_sm_is_rx_fifo_empty(PPS_PIO, pps_sm)) {
         (void)pio_sm_get(PPS_PIO, pps_sm);
-        __atomic_add_fetch(&pps_counter, 1, __ATOMIC_RELAXED);
+        uint64_t now_us = time_us_64();
+        uint64_t last = __atomic_load_n(&last_pps_edge_us, __ATOMIC_RELAXED);
+        if (now_us - last >= PPS_MIN_INTERVAL_US) {
+            __atomic_store_n(&last_pps_edge_us, now_us, __ATOMIC_RELAXED);
+            __atomic_add_fetch(&pps_counter, 1, __ATOMIC_RELAXED);
+        }
     }
 }
 
@@ -197,6 +206,7 @@ static void handle_sync_request(QuadratureDecoder &dec, int32_t idx) {
 
     clear_pps_fifo();
     __atomic_store_n(&pps_counter, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&last_pps_edge_us, 0, __ATOMIC_RELAXED);
     __atomic_store_n(&g_imu_t_us, 0, __ATOMIC_RELAXED);
 
     buf_head = 0;
