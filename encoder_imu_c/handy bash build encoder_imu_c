@@ -1,0 +1,5 @@
+cd ~/Documents/encoder_imu_c
+rm -rf build
+mkdir build && cd build
+cmake .. -DPICO_BOARD=pico2  # or pico, pico_w, etc., if applicable
+make -j"$(nproc)"

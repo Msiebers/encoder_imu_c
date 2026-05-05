@@ -1,0 +1,7 @@
+.program pps_capture
+.wrap_target
+    wait 0 pin 0    ; require the PPS line to be low first
+    wait 1 pin 0    ; then count the next rising edge
+    push noblock    ; one FIFO event per rising edge
+    wait 0 pin 0    ; do not re-arm until the line returns low
+.wrap
